@@ -11,7 +11,7 @@ import { auth } from "@/lib/firebase";
 
 import {
   BookOpen, LayoutDashboard, FileText, Layers, BrainCircuit,
-  Clapperboard, Users, Settings, Search, Bell, Plus,
+  Clapperboard, Users, Search, Bell, Plus,
   ArrowUpRight, Sparkles, Clock3, CheckCircle2, Menu, X,
   Lock, Crown, RefreshCw, Copy, Upload, Lightbulb, LogOut
 } from "lucide-react";
@@ -45,6 +45,165 @@ type QuizQuestion = {
   explanation: string;
 };
 
+// Prepared offline fallback based on the ML practicals PDF.
+const DEMO_ML_SUMMARY = `
+# Machine Learning Practical File — Summary
+
+This practical file demonstrates supervised and unsupervised machine learning algorithms using Python and Scikit-learn.
+
+## 1. Regression
+- Linear Regression predicts continuous numerical values using a linear relationship.
+- Gradient Descent minimizes the loss function by updating model parameters.
+- Ridge Regression uses L2 regularization to reduce overfitting.
+- Lasso Regression uses L1 regularization and can shrink less important coefficients to zero.
+
+## 2. Classification
+- Logistic Regression predicts class probabilities for classification.
+- Decision Trees classify data using feature-based decision rules.
+- Random Forest combines multiple decision trees.
+- K-Nearest Neighbors (KNN) predicts using the nearest training samples.
+- Support Vector Machine (SVM) finds an optimal separating boundary.
+
+## 3. Clustering
+- K-Means groups data into K clusters based on distance from centroids.
+- The Elbow Method uses WCSS to help select the number of clusters.
+- Silhouette Score evaluates how well-separated clusters are.
+- DBSCAN forms clusters using density and identifies noise points.
+
+## 4. Feature Scaling and Hyperparameter Tuning
+- StandardScaler standardizes feature values.
+- GridSearchCV searches for suitable hyperparameter combinations.
+
+## 5. Model Evaluation
+Classification metrics include accuracy, precision, recall, F1-score and confusion matrix.
+Regression metrics include MAE, MSE, RMSE and R².
+Silhouette Score is used for clustering evaluation.
+
+## 6. Iris Dataset
+The Iris dataset contains 150 samples, four features and three species:
+Setosa, Versicolor and Virginica.
+
+## Conclusion
+The practicals demonstrate regression, classification, clustering, feature scaling, model comparison and hyperparameter tuning using Python and Scikit-learn.
+`;
+
+const DEMO_ML_KEYWORDS = [
+  "Machine Learning",
+  "Linear Regression",
+  "Gradient Descent",
+  "Logistic Regression",
+  "Decision Tree",
+  "Random Forest",
+  "K-Nearest Neighbors",
+  "Support Vector Machine",
+  "K-Means Clustering",
+  "DBSCAN",
+  "Ridge Regression",
+  "Lasso Regression",
+  "StandardScaler",
+  "GridSearchCV",
+  "Confusion Matrix",
+  "Accuracy",
+  "Precision",
+  "Recall",
+  "F1 Score",
+  "Iris Dataset",
+];
+
+const DEMO_ML_QUIZ: QuizQuestion[] = [
+  {
+    question: "Which algorithm predicts continuous numerical values?",
+    options: ["K-Means", "Linear Regression", "DBSCAN", "KNN"],
+    answer: "Linear Regression",
+    explanation: "Linear Regression predicts continuous numerical values."
+  },
+  {
+    question: "Which technique minimizes the loss function by updating weights?",
+    options: ["PCA", "Gradient Descent", "DBSCAN", "Decision Tree"],
+    answer: "Gradient Descent",
+    explanation: "Gradient Descent updates model parameters to minimize the loss."
+  },
+  {
+    question: "Which algorithm is based on nearest neighbours?",
+    options: ["KNN", "SVM", "Ridge", "K-Means"],
+    answer: "KNN",
+    explanation: "KNN predicts using the closest training samples."
+  },
+  {
+    question: "Which algorithm combines multiple decision trees?",
+    options: ["Logistic Regression", "Random Forest", "Lasso", "DBSCAN"],
+    answer: "Random Forest",
+    explanation: "Random Forest combines predictions from multiple decision trees."
+  },
+  {
+    question: "Which algorithm identifies noise points using density?",
+    options: ["K-Means", "Linear Regression", "DBSCAN", "KNN"],
+    answer: "DBSCAN",
+    explanation: "DBSCAN groups dense regions and identifies noise points."
+  },
+  {
+    question: "What does StandardScaler do?",
+    options: [
+      "Removes all features",
+      "Standardizes feature values",
+      "Creates clusters",
+      "Predicts labels"
+    ],
+    answer: "Standardizes feature values",
+    explanation: "StandardScaler transforms features to have mean 0 and standard deviation 1."
+  },
+  {
+    question: "Which metric is commonly used for classification performance?",
+    options: ["RMSE", "MAE", "F1-score", "WCSS"],
+    answer: "F1-score",
+    explanation: "F1-score is the harmonic mean of precision and recall."
+  },
+  {
+    question: "Which method helps select the number of clusters in K-Means?",
+    options: ["Elbow Method", "Confusion Matrix", "GridSearchCV", "Gradient Descent"],
+    answer: "Elbow Method",
+    explanation: "The Elbow Method studies WCSS for different values of K."
+  },
+  {
+    question: "Which regularization technique uses L1 penalty?",
+    options: ["Ridge", "Lasso", "KNN", "SVM"],
+    answer: "Lasso",
+    explanation: "Lasso uses L1 regularization and can shrink coefficients to zero."
+  },
+  {
+    question: "How many samples are present in the Iris dataset?",
+    options: ["100", "120", "150", "200"],
+    answer: "150",
+    explanation: "The Iris dataset contains 150 samples across three species."
+  }
+];
+
+function isQuotaError(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
+
+  return (
+    message.includes("quota") ||
+    message.includes("rate limit") ||
+    message.includes("429") ||
+    message.includes("resource exhausted")
+  );
+}
+
+// Prevent unrelated PDFs from receiving ML-specific fallback content.
+function isMLPracticalsMaterial(text: string) {
+  const content = text.toLowerCase();
+
+  return (
+    content.includes("iris") &&
+    (content.includes("regression") ||
+      content.includes("k-means") ||
+      content.includes("dbscan"))
+  );
+}
+
 export default function Home() {
   const router = useRouter();
 
@@ -52,6 +211,40 @@ export default function Home() {
   const [authChecking, setAuthChecking] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const [active, setActive] = useState("Dashboard");
+  const [search, setSearch] = useState("");
+  const [mobileMenu, setMobileMenu] = useState(false);
+
+  const [fileName, setFileName] = useState("");
+  const [extractedText, setExtractedText] = useState("");
+  const [pdfId, setPdfId] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  const [summary, setSummary] = useState("");
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isDemoSummary, setIsDemoSummary] = useState(false);
+
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [isExtractingKeywords, setIsExtractingKeywords] = useState(false);
+  const [keywordError, setKeywordError] = useState("");
+  const [isDemoKeywords, setIsDemoKeywords] = useState(false);
+
+  const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
+  const [quizNumber, setQuizNumber] = useState(0);
+  const [remainingQuizzes, setRemainingQuizzes] = useState(3);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [quizError, setQuizError] = useState("");
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [showQuizResult, setShowQuizResult] = useState(false);
+  const [isDemoQuiz, setIsDemoQuiz] = useState(false);
+
+  // Prevent simultaneous Gemini API requests
+  const [isAiRequesting, setIsAiRequesting] = useState(false);
+  const aiRequestLock = useRef(false);
+
+  const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -80,33 +273,6 @@ export default function Home() {
     }
   }
 
-  const [active, setActive] = useState("Dashboard");
-  const [search, setSearch] = useState("");
-  const [mobileMenu, setMobileMenu] = useState(false);
-
-  const [fileName, setFileName] = useState("");
-  const [extractedText, setExtractedText] = useState("");
-  const [pdfId, setPdfId] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-
-  const [summary, setSummary] = useState("");
-  const [isSummarizing, setIsSummarizing] = useState(false);
-
-  const [keywords, setKeywords] = useState<string[]>([]);
-  const [isExtractingKeywords, setIsExtractingKeywords] = useState(false);
-  const [keywordError, setKeywordError] = useState("");
-
-  const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
-  const [quizNumber, setQuizNumber] = useState(0);
-  const [remainingQuizzes, setRemainingQuizzes] = useState(3);
-  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
-  const [quizError, setQuizError] = useState("");
-  const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [showQuizResult, setShowQuizResult] = useState(false);
-
-  const fileInput = useRef<HTMLInputElement>(null);
-
   const filteredResources = resources.filter((resource) =>
     resource.title.toLowerCase().includes(search.toLowerCase())
   );
@@ -122,6 +288,11 @@ export default function Home() {
       return;
     }
 
+    if (isProcessing || aiRequestLock.current) {
+      setUploadError("Please wait for the current operation to finish.");
+      return;
+    }
+
     setFileName(file.name);
     setExtractedText("");
     setSummary("");
@@ -134,6 +305,11 @@ export default function Home() {
     setKeywordError("");
     setQuizError("");
     setUploadError("");
+
+    setIsDemoSummary(false);
+    setIsDemoKeywords(false);
+    setIsDemoQuiz(false);
+
     setIsProcessing(true);
 
     const newPdfId = `${file.name}-${file.size}-${file.lastModified}`;
@@ -161,7 +337,9 @@ export default function Home() {
         fullText += `\n\nPage ${pageNumber}\n${pageText}`;
       }
 
-      const cleanedText = fullText.replace(/Page \d+/g, "").trim();
+      const cleanedText = fullText
+        .replace(/Page \d+/g, "")
+        .trim();
 
       if (!cleanedText) {
         setUploadError(
@@ -170,29 +348,9 @@ export default function Home() {
         return;
       }
 
-      setExtractedText(fullText.trim());
+      // PDF extraction is local. No Gemini request is made here.
+      setExtractedText(cleanedText);
 
-      setIsExtractingKeywords(true);
-      try {
-        const result = await extractKeywords(cleanedText, newPdfId);
-
-        const receivedKeywords = result.keywords || [];
-
-        setKeywords(
-          Array.isArray(receivedKeywords)
-            ? receivedKeywords
-            : typeof receivedKeywords === "string"
-              ? receivedKeywords.split(/[,;\n]+/).map((item: string) => item.trim()).filter(Boolean)
-              : []
-        );
-      } catch (error) {
-        console.error("Keyword extraction error:", error);
-        setKeywordError(
-          error instanceof Error ? error.message : "Could not extract keywords."
-        );
-      } finally {
-        setIsExtractingKeywords(false);
-      }
     } catch (error) {
       console.error("PDF processing error:", error);
       setUploadError(
@@ -203,26 +361,83 @@ export default function Home() {
     }
   }
 
+  async function handleExtractKeywords() {
+    if (!extractedText.trim() || aiRequestLock.current) return;
+
+    aiRequestLock.current = true;
+    setIsAiRequesting(true);
+    setIsExtractingKeywords(true);
+    setKeywordError("");
+    setKeywords([]);
+    setIsDemoKeywords(false);
+
+    try {
+      const result = await extractKeywords(extractedText, pdfId);
+      const receivedKeywords = result.keywords || [];
+
+      setKeywords(
+        Array.isArray(receivedKeywords)
+          ? receivedKeywords
+          : typeof receivedKeywords === "string"
+            ? receivedKeywords
+                .split(/[,;\n]+/)
+                .map((item: string) => item.trim())
+                .filter(Boolean)
+            : []
+      );
+    } catch (error) {
+      console.error("Keyword extraction error:", error);
+
+      if (isQuotaError(error) && isMLPracticalsMaterial(extractedText)) {
+        setKeywords(DEMO_ML_KEYWORDS);
+        setIsDemoKeywords(true);
+        setKeywordError("");
+      } else {
+        setKeywordError(
+          error instanceof Error ? error.message : "Could not extract keywords."
+        );
+      }
+    } finally {
+      setIsExtractingKeywords(false);
+      aiRequestLock.current = false;
+      setIsAiRequesting(false);
+    }
+  }
+
   async function handleGenerateSummary() {
     if (!extractedText.trim()) {
       setUploadError("Please upload a text-based PDF first.");
       return;
     }
 
+    if (aiRequestLock.current) return;
+
+    aiRequestLock.current = true;
+    setIsAiRequesting(true);
     setIsSummarizing(true);
     setSummary("");
     setUploadError("");
+    setIsDemoSummary(false);
 
     try {
       const result = await generateSummary(extractedText, pdfId);
       setSummary(result.summary || "No summary was returned.");
     } catch (error) {
       console.error("Summary generation error:", error);
-      setUploadError(
-        error instanceof Error ? error.message : "Could not generate summary."
-      );
+
+      if (isQuotaError(error) && isMLPracticalsMaterial(extractedText)) {
+        setSummary(DEMO_ML_SUMMARY);
+        setIsDemoSummary(true);
+        setUploadError("");
+      } else {
+        setUploadError(
+          error instanceof Error ? error.message : "Could not generate summary."
+        );
+      }
     } finally {
       setIsSummarizing(false);
+      aiRequestLock.current = false;
+      setIsAiRequesting(false);
     }
   }
 
@@ -232,11 +447,16 @@ export default function Home() {
       return;
     }
 
+    if (aiRequestLock.current || remainingQuizzes <= 0) return;
+
+    aiRequestLock.current = true;
+    setIsAiRequesting(true);
     setIsGeneratingQuiz(true);
     setQuizError("");
     setQuiz([]);
     setAnswers({});
     setShowQuizResult(false);
+    setIsDemoQuiz(false);
 
     try {
       const result = await generateQuiz(extractedText, pdfId);
@@ -247,15 +467,28 @@ export default function Home() {
       );
     } catch (error) {
       console.error("Quiz generation error:", error);
-      setQuizError(
-        error instanceof Error ? error.message : "Could not generate quiz."
-      );
+
+      if (isQuotaError(error) && isMLPracticalsMaterial(extractedText)) {
+        setQuiz(DEMO_ML_QUIZ);
+        setIsDemoQuiz(true);
+        setQuizNumber((previous) => previous + 1);
+        setRemainingQuizzes((previous) => Math.max(0, previous - 1));
+        setQuizError("");
+      } else {
+        setQuizError(
+          error instanceof Error ? error.message : "Could not generate quiz."
+        );
+      }
     } finally {
       setIsGeneratingQuiz(false);
+      aiRequestLock.current = false;
+      setIsAiRequesting(false);
     }
   }
 
   function clearSelectedFile() {
+    if (aiRequestLock.current) return;
+
     setFileName("");
     setExtractedText("");
     setPdfId("");
@@ -269,6 +502,10 @@ export default function Home() {
     setKeywordError("");
     setQuizError("");
     setShowQuizResult(false);
+
+    setIsDemoSummary(false);
+    setIsDemoKeywords(false);
+    setIsDemoQuiz(false);
 
     if (fileInput.current) fileInput.current.value = "";
   }
@@ -303,7 +540,7 @@ export default function Home() {
 
           <button
             onClick={handleGenerateSummary}
-            disabled={!extractedText || isSummarizing}
+            disabled={!extractedText || isSummarizing || isAiRequesting}
             className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Sparkles size={16} />
@@ -319,6 +556,12 @@ export default function Home() {
 
         {summary && (
           <div className="mt-5 rounded-xl border border-white/[0.06] bg-black/20 p-4 sm:p-5">
+            {isDemoSummary && (
+              <p className="mb-4 rounded-lg bg-violet-500/10 p-3 text-xs text-violet-300">
+                Prepared ML practicals demo content · Offline fallback (not a live Gemini response).
+              </p>
+            )}
+
             <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-violet-300">
                 Your generated notes
@@ -367,9 +610,24 @@ export default function Home() {
           <Lightbulb size={19} className="text-violet-300" />
           <h3 className="font-semibold">Important Keywords</h3>
         </div>
+
         <p className="mt-2 text-xs text-gray-500">
-          Key concepts automatically identified from your PDF.
+          Generate important concepts from your uploaded study material.
         </p>
+
+        <button
+          onClick={handleExtractKeywords}
+          disabled={!extractedText || isExtractingKeywords || isAiRequesting}
+          className="mt-4 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isExtractingKeywords ? "Extracting..." : "Extract Keywords"}
+        </button>
+
+        {isDemoKeywords && (
+          <p className="mt-4 text-xs text-violet-300">
+            Prepared ML practicals demo keywords · Offline fallback.
+          </p>
+        )}
 
         {isExtractingKeywords && (
           <p className="mt-4 text-sm text-violet-300">
@@ -396,7 +654,7 @@ export default function Home() {
 
         {!isExtractingKeywords && keywords.length === 0 && !keywordError && (
           <p className="mt-4 text-sm text-gray-500">
-            Upload a PDF to discover its important keywords.
+            Upload a PDF and click Extract Keywords to discover its important concepts.
           </p>
         )}
       </div>
@@ -419,13 +677,11 @@ export default function Home() {
 
           <button
             onClick={handleGenerateQuiz}
-            disabled={!extractedText || isGeneratingQuiz || remainingQuizzes <= 0}
+            disabled={!extractedText || isGeneratingQuiz || isAiRequesting || remainingQuizzes <= 0}
             className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw size={15} />
-            {isGeneratingQuiz
-              ? "Generating quiz..."
-              : "Generate New Quiz"}
+            {isGeneratingQuiz ? "Generating quiz..." : "Generate New Quiz"}
           </button>
         </div>
 
@@ -437,6 +693,12 @@ export default function Home() {
             Remaining: {remainingQuizzes}
           </span>
         </div>
+
+        {isDemoQuiz && (
+          <p className="mt-4 rounded-lg bg-violet-500/10 p-3 text-xs text-violet-300">
+            Prepared ML practicals demo quiz · Offline fallback (not a live Gemini response).
+          </p>
+        )}
 
         {quizError && (
           <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">
@@ -475,11 +737,7 @@ export default function Home() {
                     if (showQuizResult && isCorrect) {
                       optionStyle =
                         "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
-                    } else if (
-                      showQuizResult &&
-                      isSelected &&
-                      !isCorrect
-                    ) {
+                    } else if (showQuizResult && isSelected && !isCorrect) {
                       optionStyle =
                         "border-red-500/40 bg-red-500/10 text-red-200";
                     } else if (isSelected) {
@@ -788,7 +1046,6 @@ export default function Home() {
     }
   }
 
-  // Keep dashboard hidden until Firebase confirms the user is signed in.
   if (authChecking) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0b0b12] text-violet-300">
@@ -924,7 +1181,7 @@ export default function Home() {
 
           {isProcessing && (
             <div className="mt-5 rounded-xl border border-violet-500/20 bg-violet-500/10 p-4 text-sm text-violet-200">
-              Reading your PDF and extracting keywords... Please wait.
+              Reading your PDF locally. No AI request is being made...
             </div>
           )}
 
@@ -950,7 +1207,7 @@ export default function Home() {
 
           <footer className="mt-10 flex flex-col justify-between gap-2 border-t border-white/[0.06] py-6 text-xs text-gray-600 sm:flex-row">
             <span>SKIMLY: MTJ Edition · Built for better learning.</span>
-            <span>PDF extraction enabled · Gemini AI integration</span>
+            <span>PDF extraction enabled · Gemini AI integration · Offline demo fallback</span>
           </footer>
         </div>
       </section>
